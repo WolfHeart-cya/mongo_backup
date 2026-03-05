@@ -88,36 +88,28 @@ app.whenReady().then(() => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'openDirectory'],
       title: '복원할 백업 파일(.gz, .archive)이나 폴더를 선택하세요',
-      // 확장자 필터에 archive 추가
       filters: [{ name: 'Archives & Folders', extensions: ['gz', 'archive', '*'] }]
     })
     if (result.canceled) return null
     return result.filePaths[0]
   })
 
-  // 백업 실행
+  // 백업 실행 (무조건 .archive 파일 1개 생성으로 고정)
   ipcMain.handle(
     'run-backup',
-    async (_, dbName: string, collectionName: string, savePath: string, useArchive: boolean) => {
+    async (_, dbName: string, collectionName: string, savePath: string) => {
       if (!savePath) return { success: false, message: '저장 경로가 지정되지 않았습니다.' }
 
       const timestamp = Date.now()
       const args = [`--uri=${MONGO_URI}`, `--db=${dbName}`, `--collection=${collectionName}`]
-      let targetPath = ''
-
-      if (useArchive) {
-        targetPath = join(savePath, `${collectionName}_backup_${timestamp}.gz`)
-        args.push('--gzip', `--archive=${targetPath}`)
-      } else {
-        targetPath = join(savePath, `${collectionName}_backup_${timestamp}`)
-        args.push(`--out=${targetPath}`)
-      }
+      // Kumah님 요청에 따라 무조건 단일 압축 파일(.archive)로 저장
+      const targetPath = join(savePath, `${collectionName}_backup_${timestamp}.archive`)
+      args.push('--gzip', `--archive=${targetPath}`)
 
       return new Promise((resolve) => {
         const dumpProcess = spawn('/opt/homebrew/bin/mongodump', args)
         let errorOutput = ''
 
-        // 에러 로그 캡처
         dumpProcess.stderr.on('data', (data) => {
           errorOutput += data.toString()
         })
@@ -149,17 +141,13 @@ app.whenReady().then(() => {
       const stat = fs.statSync(sourcePath)
 
       if (stat.isDirectory()) {
-        // 1. 폴더를 선택한 경우
         args.push('--dir', sourcePath)
       } else if (stat.isFile()) {
-        // 2. 파일인 경우 확장자에 따라 처리
         if (sourcePath.endsWith('.gz')) {
           args.push('--gzip', `--archive=${sourcePath}`)
         } else if (sourcePath.endsWith('.archive')) {
-          // .archive 파일인 경우 압축 해제 없이 바로 아카이브로 복원
-          args.push(`--archive=${sourcePath}`)
+          args.push('--gzip', `--archive=${sourcePath}`)
         } else if (sourcePath.endsWith('.bson')) {
-          // BSON 단일 파일을 선택했을 경우
           args.push(sourcePath)
         } else {
           return {
@@ -176,7 +164,6 @@ app.whenReady().then(() => {
       const restoreProcess = spawn('/opt/homebrew/bin/mongorestore', args)
       let errorOutput = ''
 
-      // 에러 로그 캡처
       restoreProcess.stderr.on('data', (data) => {
         errorOutput += data.toString()
       })
@@ -206,12 +193,3 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
-
-// 이것을 먼저 실행 npm run build
-// 앱 빌드 명령어 npx electron-builder --mac --arm64
-// 앱 빌드 전 이전에 만들어 놓은 dis 폴더 삭제
-//
-//
-// rm -rf out dist build
-// npm run build
-// npx electron-builder --mac --arm64

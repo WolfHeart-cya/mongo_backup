@@ -5,8 +5,9 @@ const api = {
   getCollections: (dbName: string) => ipcRenderer.invoke('get-collections', dbName),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   selectRestoreTarget: () => ipcRenderer.invoke('select-restore-target'),
-  runBackup: (dbName: string, collectionName: string, savePath: string, useArchive: boolean) =>
-    ipcRenderer.invoke('run-backup', dbName, collectionName, savePath, useArchive),
+  // runBackup에서 useArchive 파라미터 삭제
+  runBackup: (dbName: string, collectionName: string, savePath: string) =>
+    ipcRenderer.invoke('run-backup', dbName, collectionName, savePath),
   runRestore: (targetDbName: string, sourcePath: string) =>
     ipcRenderer.invoke('run-restore', targetDbName, sourcePath)
 }

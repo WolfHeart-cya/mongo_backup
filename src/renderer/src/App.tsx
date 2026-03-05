@@ -7,11 +7,11 @@ declare global {
       getCollections: (dbName: string) => Promise<string[]>
       selectFolder: () => Promise<string | null>
       selectRestoreTarget: () => Promise<string | null>
+      // 파라미터 3개로 축소
       runBackup: (
         dbName: string,
         collectionName: string,
-        savePath: string,
-        useArchive: boolean
+        savePath: string
       ) => Promise<{ success: boolean; message: string }>
       runRestore: (
         targetDbName: string,
@@ -30,7 +30,7 @@ export default function App(): JSX.Element {
   const [backupSelectedDb, setBackupSelectedDb] = useState('')
   const [backupSelectedCol, setBackupSelectedCol] = useState('')
   const [backupSavePath, setBackupSavePath] = useState('/Volumes/cloud/Backups/mongostock_features')
-  const [backupUseArchive, setBackupUseArchive] = useState(false) // <-- false로 변경!
+  // backupUseArchive 상태 삭제됨
   const [backupLog, setBackupLog] = useState('백업 준비 완료...')
 
   // --- Restore 탭 상태 ---
@@ -78,14 +78,10 @@ export default function App(): JSX.Element {
     }
 
     setBackupLog(
-      `[${backupSelectedDb}.${backupSelectedCol}] 백업을 시도합니다...\n- 형태: ${backupUseArchive ? '.gz 압축 파일' : 'BSON 폴더'}`
+      `[${backupSelectedDb}.${backupSelectedCol}] 백업을 시도합니다...\n- 형태: 단일 아카이브 파일(.archive)`
     )
-    const response = await window.api.runBackup(
-      backupSelectedDb,
-      backupSelectedCol,
-      backupSavePath,
-      backupUseArchive
-    )
+    // useArchive 옵션 제거하고 3개만 전달
+    const response = await window.api.runBackup(backupSelectedDb, backupSelectedCol, backupSavePath)
     setBackupLog((prev) => `${prev}\n${response.message}`)
   }
 
@@ -101,7 +97,7 @@ export default function App(): JSX.Element {
   const handleRestore = async (): Promise<void> => {
     if (!window.api) return
     if (!restoreFilePath) {
-      setRestoreLog('❌ 먼저 복원할 파일(.gz)이나 폴더를 선택해 주세요!')
+      setRestoreLog('❌ 먼저 복원할 파일(.archive 등)을 선택해 주세요!')
       return
     }
 
@@ -199,32 +195,7 @@ export default function App(): JSX.Element {
                     경로 찾기
                   </button>
                 </div>
-
-                <div
-                  className="flex items-center mt-3 ml-1 cursor-pointer w-fit"
-                  onClick={() => setBackupUseArchive(!backupUseArchive)}
-                >
-                  <div
-                    className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${
-                      backupUseArchive
-                        ? 'bg-emerald-500 border-emerald-500'
-                        : 'bg-slate-900 border-slate-500'
-                    }`}
-                  >
-                    {backupUseArchive && (
-                      <svg
-                        className="w-3.5 h-3.5 text-white"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={3}
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </div>
-                  <span className="ml-2 text-sm text-slate-300">단일 압축 파일(.gz)로 저장</span>
-                </div>
+                {/* 체크박스 UI 완전히 삭제됨 */}
               </div>
 
               <button
@@ -269,7 +240,7 @@ export default function App(): JSX.Element {
 
               <div>
                 <label className="block text-sm font-semibold mb-2 text-slate-400">
-                  복원할 파일/폴더 선택
+                  복원할 파일 선택
                 </label>
                 <div className="flex gap-2">
                   <input
