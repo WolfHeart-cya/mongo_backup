@@ -19,6 +19,13 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  target:
+      - target: dmg
+        arch:
+          - arm64 # universal 대신 현재 기기에 맞는 arm64만 지정해 봅니다.
+  identity: null # 명시적으로 서명을 건너뜀 (Ad-hoc)
+  gatekeeperAssess: false
+  hardenedRuntime: false # 서명이 없을 경우 이 기능이 켜져 있으면 크래시가 발생합니다.
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.

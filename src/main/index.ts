@@ -113,7 +113,13 @@ app.whenReady().then(() => {
       }
 
       return new Promise((resolve) => {
-        const dumpProcess = spawn('mongodump', args)
+        const dumpProcess = spawn('/opt/homebrew/bin/mongodump', args)
+        let errorOutput = ''
+
+        // 에러 로그 캡처
+        dumpProcess.stderr.on('data', (data) => {
+          errorOutput += data.toString()
+        })
 
         dumpProcess.on('close', (code) => {
           if (code === 0) {
@@ -121,7 +127,7 @@ app.whenReady().then(() => {
           } else {
             resolve({
               success: false,
-              message: `❌ 백업 실패 (Exit code: ${code}).`
+              message: `❌ 백업 실패 (Exit code: ${code}).\n상세 오류:\n${errorOutput}`
             })
           }
         })
@@ -152,7 +158,13 @@ app.whenReady().then(() => {
     }
 
     return new Promise((resolve) => {
-      const restoreProcess = spawn('mongorestore', args)
+      const restoreProcess = spawn('/opt/homebrew/bin/mongorestore', args)
+      let errorOutput = ''
+
+      // 에러 로그 캡처
+      restoreProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString()
+      })
 
       restoreProcess.on('close', (code) => {
         if (code === 0) {
@@ -160,7 +172,7 @@ app.whenReady().then(() => {
         } else {
           resolve({
             success: false,
-            message: `❌ 복원 실패 (Exit code: ${code}).`
+            message: `❌ 복원 실패 (Exit code: ${code}).\n상세 오류:\n${errorOutput}`
           })
         }
       })
@@ -179,3 +191,12 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+// 이것을 먼저 실행 npm run build
+// 앱 빌드 명령어 npx electron-builder --mac --arm64
+// 앱 빌드 전 이전에 만들어 놓은 dis 폴더 삭제
+//
+//
+// rm -rf out dist build
+// npm run build
+// npx electron-builder --mac --arm64

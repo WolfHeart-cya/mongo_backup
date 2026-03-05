@@ -30,7 +30,7 @@ export default function App(): JSX.Element {
   const [backupSelectedDb, setBackupSelectedDb] = useState('')
   const [backupSelectedCol, setBackupSelectedCol] = useState('')
   const [backupSavePath, setBackupSavePath] = useState('/Volumes/cloud/Backups/mongostock_features')
-  const [backupUseArchive, setBackupUseArchive] = useState(true)
+  const [backupUseArchive, setBackupUseArchive] = useState(false) // <-- false로 변경!
   const [backupLog, setBackupLog] = useState('백업 준비 완료...')
 
   // --- Restore 탭 상태 ---
