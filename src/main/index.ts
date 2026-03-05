@@ -87,8 +87,9 @@ app.whenReady().then(() => {
   ipcMain.handle('select-restore-target', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'openDirectory'],
-      title: '복원할 백업 파일(.gz)이나 폴더를 선택하세요',
-      filters: [{ name: 'Archives & Folders', extensions: ['gz', '*'] }]
+      title: '복원할 백업 파일(.gz, .archive)이나 폴더를 선택하세요',
+      // 확장자 필터에 archive 추가
+      filters: [{ name: 'Archives & Folders', extensions: ['gz', 'archive', '*'] }]
     })
     if (result.canceled) return null
     return result.filePaths[0]
@@ -146,12 +147,26 @@ app.whenReady().then(() => {
 
     try {
       const stat = fs.statSync(sourcePath)
-      if (stat.isFile() && sourcePath.endsWith('.gz')) {
-        args.push('--gzip', `--archive=${sourcePath}`)
-      } else if (stat.isDirectory()) {
+
+      if (stat.isDirectory()) {
+        // 1. 폴더를 선택한 경우
         args.push('--dir', sourcePath)
-      } else {
-        return { success: false, message: '지원하지 않는 파일 형식입니다.' }
+      } else if (stat.isFile()) {
+        // 2. 파일인 경우 확장자에 따라 처리
+        if (sourcePath.endsWith('.gz')) {
+          args.push('--gzip', `--archive=${sourcePath}`)
+        } else if (sourcePath.endsWith('.archive')) {
+          // .archive 파일인 경우 압축 해제 없이 바로 아카이브로 복원
+          args.push(`--archive=${sourcePath}`)
+        } else if (sourcePath.endsWith('.bson')) {
+          // BSON 단일 파일을 선택했을 경우
+          args.push(sourcePath)
+        } else {
+          return {
+            success: false,
+            message: '지원하지 않는 파일 형식입니다. (.gz, .archive, .bson 또는 폴더만 지원)'
+          }
+        }
       }
     } catch (err) {
       return { success: false, message: `경로를 읽을 수 없습니다: ${err}` }
