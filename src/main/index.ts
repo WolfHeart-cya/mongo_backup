@@ -94,17 +94,34 @@ app.whenReady().then(() => {
     return result.filePaths[0]
   })
 
-  // 백업 실행 (무조건 .archive 파일 1개 생성으로 고정)
+  // 백업 실행
   ipcMain.handle(
     'run-backup',
-    async (_, dbName: string, collectionName: string, savePath: string) => {
+    // customText 파라미터가 추가되었습니다
+    async (_, dbName: string, collectionName: string, savePath: string, customText: string) => {
       if (!savePath) return { success: false, message: '저장 경로가 지정되지 않았습니다.' }
 
-      const timestamp = Date.now()
-      const args = [`--uri=${MONGO_URI}`, `--db=${dbName}`, `--collection=${collectionName}`]
-      // Kumah님 요청에 따라 무조건 단일 압축 파일(.archive)로 저장
-      const targetPath = join(savePath, `${collectionName}_backup_${timestamp}.archive`)
-      args.push('--gzip', `--archive=${targetPath}`)
+      // 1. 현재 날짜를 구해서 YYMMDD(6자리) 형식으로 만듭니다.
+      const d = new Date()
+      const yy = String(d.getFullYear()).slice(-2)
+      const mm = String(d.getMonth() + 1).padStart(2, '0')
+      const dd = String(d.getDate()).padStart(2, '0')
+      const yymmdd = `${yy}${mm}${dd}`
+
+      // 2. 사용자가 임의로 입력한 값이 있으면 넣고, 없으면 빈 문자열을 씁니다.
+      const suffix = customText ? customText : '    ' // 빈칸을 띄어쓰기로 남기려면 '    '
+
+      // 3. 파일명 조립 (예: ohlcv_krx__260305-    .archive)
+      const fileName = `${collectionName}__${yymmdd}-${suffix}.archive`
+      const targetPath = join(savePath, fileName)
+
+      const args = [
+        `--uri=${MONGO_URI}`,
+        `--db=${dbName}`,
+        `--collection=${collectionName}`,
+        '--gzip',
+        `--archive=${targetPath}`
+      ]
 
       return new Promise((resolve) => {
         const dumpProcess = spawn('/opt/homebrew/bin/mongodump', args)
@@ -116,7 +133,7 @@ app.whenReady().then(() => {
 
         dumpProcess.on('close', (code) => {
           if (code === 0) {
-            resolve({ success: true, message: `✅ 백업 성공!\n저장 경로: ${targetPath}` })
+            resolve({ success: true, message: `✅ 백업 성공!\n저장 파일: ${fileName}` })
           } else {
             resolve({
               success: false,

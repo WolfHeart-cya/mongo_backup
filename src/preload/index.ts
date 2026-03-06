@@ -5,9 +5,9 @@ const api = {
   getCollections: (dbName: string) => ipcRenderer.invoke('get-collections', dbName),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   selectRestoreTarget: () => ipcRenderer.invoke('select-restore-target'),
-  // runBackup에서 useArchive 파라미터 삭제
-  runBackup: (dbName: string, collectionName: string, savePath: string) =>
-    ipcRenderer.invoke('run-backup', dbName, collectionName, savePath),
+  // customText 파라미터가 추가되었습니다.
+  runBackup: (dbName: string, collectionName: string, savePath: string, customText: string) =>
+    ipcRenderer.invoke('run-backup', dbName, collectionName, savePath, customText),
   runRestore: (targetDbName: string, sourcePath: string) =>
     ipcRenderer.invoke('run-restore', targetDbName, sourcePath)
 }

@@ -7,11 +7,11 @@ declare global {
       getCollections: (dbName: string) => Promise<string[]>
       selectFolder: () => Promise<string | null>
       selectRestoreTarget: () => Promise<string | null>
-      // 파라미터 3개로 축소
       runBackup: (
         dbName: string,
         collectionName: string,
-        savePath: string
+        savePath: string,
+        customText: string
       ) => Promise<{ success: boolean; message: string }>
       runRestore: (
         targetDbName: string,
@@ -29,8 +29,8 @@ export default function App(): JSX.Element {
   const [backupCollections, setBackupCollections] = useState<string[]>([])
   const [backupSelectedDb, setBackupSelectedDb] = useState('')
   const [backupSelectedCol, setBackupSelectedCol] = useState('')
-  const [backupSavePath, setBackupSavePath] = useState('/Volumes/cloud/Backups/mongostock_features')
-  // backupUseArchive 상태 삭제됨
+  const [backupSavePath, setBackupSavePath] = useState('')
+  const [backupCustomText, setBackupCustomText] = useState('')
   const [backupLog, setBackupLog] = useState('백업 준비 완료...')
 
   // --- Restore 탭 상태 ---
@@ -38,21 +38,30 @@ export default function App(): JSX.Element {
   const [restoreFilePath, setRestoreFilePath] = useState('')
   const [restoreLog, setRestoreLog] = useState('복원 준비 완료...')
 
+  // 1. 초기 DB 목록 불러오기 & 초기 경로 세팅
   useEffect(() => {
     if (window.api && window.api.getDatabases) {
       window.api.getDatabases().then((dbs: string[]) => {
         setDatabases(dbs)
+
+        let initialDb = ''
         if (dbs.includes('stock_features')) {
-          setBackupSelectedDb('stock_features')
-          setRestoreSelectedDb('stock_features')
+          initialDb = 'stock_features'
         } else if (dbs.length > 0) {
-          setBackupSelectedDb(dbs[0])
-          setRestoreSelectedDb(dbs[0])
+          initialDb = dbs[0]
+        }
+
+        // 초기 DB가 결정되면 한 번에 묶어서 세팅 (useEffect 연쇄 호출 방지)
+        if (initialDb) {
+          setBackupSelectedDb(initialDb)
+          setRestoreSelectedDb(initialDb)
+          setBackupSavePath(`/Volumes/cloud/Backups/mongo/${initialDb}`)
         }
       })
     }
   }, [])
 
+  // 2. 선택된 DB가 바뀔 때 컬렉션 목록 업데이트
   useEffect(() => {
     if (!backupSelectedDb || !window.api || !window.api.getCollections) return
     window.api.getCollections(backupSelectedDb).then((cols: string[]) => {
@@ -61,12 +70,14 @@ export default function App(): JSX.Element {
     })
   }, [backupSelectedDb])
 
+  // 기존에 있던 3번 useEffect(경로 자동 업데이트)는 삭제되었습니다. (ESLint 에러 원인)
+
   const handleBackupSelectFolder = async (): Promise<void> => {
     if (!window.api) return
     const folderPath = await window.api.selectFolder()
     if (folderPath) {
       setBackupSavePath(folderPath)
-      setBackupLog(`저장 위치가 설정되었습니다:\n${folderPath}`)
+      setBackupLog(`저장 위치가 수동으로 설정되었습니다:\n${folderPath}`)
     }
   }
 
@@ -80,8 +91,13 @@ export default function App(): JSX.Element {
     setBackupLog(
       `[${backupSelectedDb}.${backupSelectedCol}] 백업을 시도합니다...\n- 형태: 단일 아카이브 파일(.archive)`
     )
-    // useArchive 옵션 제거하고 3개만 전달
-    const response = await window.api.runBackup(backupSelectedDb, backupSelectedCol, backupSavePath)
+
+    const response = await window.api.runBackup(
+      backupSelectedDb,
+      backupSelectedCol,
+      backupSavePath,
+      backupCustomText
+    )
     setBackupLog((prev) => `${prev}\n${response.message}`)
   }
 
@@ -148,7 +164,14 @@ export default function App(): JSX.Element {
                   </label>
                   <select
                     value={backupSelectedDb}
-                    onChange={(e) => setBackupSelectedDb(e.target.value)}
+                    // 🔥 onChange 이벤트 안에서 경로까지 한 번에 바꿔줍니다!
+                    onChange={(e) => {
+                      const newDb = e.target.value
+                      setBackupSelectedDb(newDb)
+                      if (newDb) {
+                        setBackupSavePath(`/Volumes/cloud/Backups/mongo/${newDb}`)
+                      }
+                    }}
                     className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 outline-none focus:border-emerald-500 transition-colors"
                   >
                     <option value="">Database</option>
@@ -195,7 +218,19 @@ export default function App(): JSX.Element {
                     경로 찾기
                   </button>
                 </div>
-                {/* 체크박스 UI 완전히 삭제됨 */}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-slate-400">
+                  파일 이름 뒤에 추가할 텍스트 (선택)
+                </label>
+                <input
+                  type="text"
+                  value={backupCustomText}
+                  onChange={(e) => setBackupCustomText(e.target.value)}
+                  placeholder="예: before_update (안 쓰면 빈칸으로 저장됨)"
+                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-sm text-slate-300 outline-none focus:border-emerald-500 transition-colors"
+                />
               </div>
 
               <button
