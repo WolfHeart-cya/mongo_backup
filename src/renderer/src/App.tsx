@@ -17,12 +17,18 @@ declare global {
         targetDbName: string,
         sourcePath: string
       ) => Promise<{ success: boolean; message: string }>
+      deleteCollections: (
+        dbName: string,
+        collectionNames: string[]
+      ) => Promise<{ success: boolean; message: string }>
     }
   }
 }
 
+type TabType = 'backup' | 'restore' | 'delete'
+
 export default function App(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<'backup' | 'restore'>('backup')
+  const [activeTab, setActiveTab] = useState<TabType>('backup')
   const [databases, setDatabases] = useState<string[]>([])
 
   // --- Backup 탭 상태 ---
@@ -38,7 +44,13 @@ export default function App(): JSX.Element {
   const [restoreFilePath, setRestoreFilePath] = useState('')
   const [restoreLog, setRestoreLog] = useState('복원 준비 완료...')
 
-  // 1. 초기 DB 목록 불러오기 & 초기 경로 세팅
+  // --- Delete 탭 상태 ---
+  const [deleteSelectedDb, setDeleteSelectedDb] = useState('')
+  const [deleteCollections, setDeleteCollections] = useState<string[]>([])
+  const [deleteSelectedCols, setDeleteSelectedCols] = useState<string[]>([])
+  const [deleteLog, setDeleteLog] = useState('삭제할 컬렉션을 선택해 주세요.')
+
+  // 1. 초기 DB 목록 불러오기 & 초기 세팅
   useEffect(() => {
     if (window.api && window.api.getDatabases) {
       window.api.getDatabases().then((dbs: string[]) => {
@@ -51,17 +63,17 @@ export default function App(): JSX.Element {
           initialDb = dbs[0]
         }
 
-        // 초기 DB가 결정되면 한 번에 묶어서 세팅 (useEffect 연쇄 호출 방지)
         if (initialDb) {
           setBackupSelectedDb(initialDb)
           setRestoreSelectedDb(initialDb)
+          setDeleteSelectedDb(initialDb)
           setBackupSavePath(`/Volumes/cloud/Backups/mongo/${initialDb}`)
         }
       })
     }
   }, [])
 
-  // 2. 선택된 DB가 바뀔 때 컬렉션 목록 업데이트
+  // 2. 백업 탭: 선택된 DB가 바뀔 때 컬렉션 업데이트
   useEffect(() => {
     if (!backupSelectedDb || !window.api || !window.api.getCollections) return
     window.api.getCollections(backupSelectedDb).then((cols: string[]) => {
@@ -70,8 +82,16 @@ export default function App(): JSX.Element {
     })
   }, [backupSelectedDb])
 
-  // 기존에 있던 3번 useEffect(경로 자동 업데이트)는 삭제되었습니다. (ESLint 에러 원인)
+  // 3. 삭제 탭: 선택된 DB가 바뀔 때 컬렉션 업데이트
+  useEffect(() => {
+    // 동기적인 setState 호출(초기화)을 없애고 순수하게 데이터만 받아옵니다.
+    if (!deleteSelectedDb || !window.api || !window.api.getCollections) return
+    window.api.getCollections(deleteSelectedDb).then((cols: string[]) => {
+      setDeleteCollections(cols)
+    })
+  }, [deleteSelectedDb])
 
+  // --- 백업 핸들러 ---
   const handleBackupSelectFolder = async (): Promise<void> => {
     if (!window.api) return
     const folderPath = await window.api.selectFolder()
@@ -101,6 +121,7 @@ export default function App(): JSX.Element {
     setBackupLog((prev) => `${prev}\n${response.message}`)
   }
 
+  // --- 복원 핸들러 ---
   const handleRestoreSelectFile = async (): Promise<void> => {
     if (!window.api) return
     const targetPath = await window.api.selectRestoreTarget()
@@ -124,9 +145,46 @@ export default function App(): JSX.Element {
     setRestoreLog((prev) => `${prev}\n${response.message}`)
   }
 
+  // --- 삭제 핸들러 ---
+  // 🔥 TypeScript 에러 해결: 반환 타입(: void) 명시
+  const handleCheckboxChange = (colName: string): void => {
+    setDeleteSelectedCols((prev) =>
+      prev.includes(colName) ? prev.filter((c) => c !== colName) : [...prev, colName]
+    )
+  }
+
+  const handleDelete = async (): Promise<void> => {
+    if (!window.api) return
+    if (deleteSelectedCols.length === 0) {
+      setDeleteLog('❌ 삭제할 컬렉션을 하나 이상 선택해 주세요!')
+      return
+    }
+
+    const isConfirmed = window.confirm(
+      `정말 [${deleteSelectedDb}] 데이터베이스에서\n${deleteSelectedCols.length}개의 컬렉션을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다!`
+    )
+
+    if (!isConfirmed) {
+      setDeleteLog('삭제 작업이 취소되었습니다.')
+      return
+    }
+
+    setDeleteLog(`${deleteSelectedCols.length}개의 컬렉션을 삭제 중입니다...`)
+    const response = await window.api.deleteCollections(deleteSelectedDb, deleteSelectedCols)
+    setDeleteLog((prev) => `${prev}\n${response.message}`)
+
+    if (response.success) {
+      window.api.getCollections(deleteSelectedDb).then((cols: string[]) => {
+        setDeleteCollections(cols)
+        setDeleteSelectedCols([])
+      })
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 p-8 font-sans">
       <div className="max-w-xl mx-auto bg-slate-800 rounded-xl shadow-xl border border-slate-700 overflow-hidden">
+        {/* 상단 탭 버튼들 */}
         <div className="flex bg-slate-950 border-b border-slate-700">
           <button
             onClick={() => setActiveTab('backup')}
@@ -148,13 +206,26 @@ export default function App(): JSX.Element {
           >
             복원 (Restore)
           </button>
+          <button
+            onClick={() => setActiveTab('delete')}
+            className={`flex-1 py-4 text-center font-bold transition-colors ${
+              activeTab === 'delete'
+                ? 'text-rose-400 bg-slate-800 border-t-2 border-rose-500'
+                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900'
+            }`}
+          >
+            삭제 (Delete)
+          </button>
         </div>
 
         <div className="p-6">
           <h1 className="text-2xl font-bold mb-6 text-slate-100">
-            {activeTab === 'backup' ? 'Kumah DB Backup' : 'Kumah DB Restore'}
+            {activeTab === 'backup' && 'Kumah DB Backup'}
+            {activeTab === 'restore' && 'Kumah DB Restore'}
+            {activeTab === 'delete' && 'Kumah DB Cleanup'}
           </h1>
 
+          {/* ================= 백업 탭 ================= */}
           {activeTab === 'backup' && (
             <div className="space-y-5 animate-in fade-in duration-300">
               <div className="flex gap-4">
@@ -164,7 +235,6 @@ export default function App(): JSX.Element {
                   </label>
                   <select
                     value={backupSelectedDb}
-                    // 🔥 onChange 이벤트 안에서 경로까지 한 번에 바꿔줍니다!
                     onChange={(e) => {
                       const newDb = e.target.value
                       setBackupSelectedDb(newDb)
@@ -251,6 +321,7 @@ export default function App(): JSX.Element {
             </div>
           )}
 
+          {/* ================= 복원 탭 ================= */}
           {activeTab === 'restore' && (
             <div className="space-y-5 animate-in fade-in duration-300">
               <div>
@@ -307,6 +378,89 @@ export default function App(): JSX.Element {
                   readOnly
                   value={restoreLog}
                   className="w-full h-32 bg-black border border-slate-700 rounded-lg p-3 font-mono text-xs text-blue-400/80 resize-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ================= 삭제 탭 ================= */}
+          {activeTab === 'delete' && (
+            <div className="space-y-5 animate-in fade-in duration-300">
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-slate-400">
+                  대상 Database
+                </label>
+                <select
+                  value={deleteSelectedDb}
+                  // 🔥 여기서 상태를 직접 초기화하도록 변경
+                  onChange={(e) => {
+                    setDeleteSelectedDb(e.target.value)
+                    setDeleteCollections([])
+                    setDeleteSelectedCols([])
+                  }}
+                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 outline-none focus:border-rose-500 transition-colors"
+                >
+                  <option value="">Database를 선택하세요</option>
+                  {databases.map((db) => (
+                    <option key={db} value={db}>
+                      {db}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-end mb-2">
+                  <label className="block text-sm font-semibold text-slate-400">
+                    삭제할 컬렉션 선택 (다중 선택 가능)
+                  </label>
+                  <span className="text-xs font-bold text-rose-400">
+                    선택됨: {deleteSelectedCols.length}개
+                  </span>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-600 rounded-lg max-h-48 overflow-y-auto p-2">
+                  {deleteCollections.length === 0 ? (
+                    <p className="text-sm text-slate-500 text-center py-4">
+                      선택된 DB에 컬렉션이 없거나 불러오는 중입니다.
+                    </p>
+                  ) : (
+                    deleteCollections.map((col) => (
+                      <label
+                        key={col}
+                        className="flex items-center px-3 py-2 hover:bg-slate-800 rounded cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={deleteSelectedCols.includes(col)}
+                          onChange={() => handleCheckboxChange(col)}
+                          className="w-4 h-4 text-rose-500 bg-slate-900 border-slate-500 rounded focus:ring-rose-500 focus:ring-2"
+                        />
+                        <span className="ml-3 text-sm text-slate-300 select-none">{col}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={handleDelete}
+                disabled={deleteSelectedCols.length === 0}
+                className={`w-full mt-4 font-bold py-3 px-4 rounded-lg transition-colors ${
+                  deleteSelectedCols.length > 0
+                    ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                    : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                선택한 컬렉션 영구 삭제
+              </button>
+
+              <div className="mt-6">
+                <label className="block text-sm font-semibold mb-2 text-slate-400">Log</label>
+                <textarea
+                  readOnly
+                  value={deleteLog}
+                  className="w-full h-32 bg-black border border-slate-700 rounded-lg p-3 font-mono text-xs text-rose-400/80 resize-none"
                 />
               </div>
             </div>

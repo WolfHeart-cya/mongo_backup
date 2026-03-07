@@ -97,21 +97,16 @@ app.whenReady().then(() => {
   // 백업 실행
   ipcMain.handle(
     'run-backup',
-    // customText 파라미터가 추가되었습니다
     async (_, dbName: string, collectionName: string, savePath: string, customText: string) => {
       if (!savePath) return { success: false, message: '저장 경로가 지정되지 않았습니다.' }
 
-      // 1. 현재 날짜를 구해서 YYMMDD(6자리) 형식으로 만듭니다.
       const d = new Date()
       const yy = String(d.getFullYear()).slice(-2)
       const mm = String(d.getMonth() + 1).padStart(2, '0')
       const dd = String(d.getDate()).padStart(2, '0')
       const yymmdd = `${yy}${mm}${dd}`
 
-      // 2. 사용자가 임의로 입력한 값이 있으면 넣고, 없으면 빈 문자열을 씁니다.
-      const suffix = customText ? customText : '    ' // 빈칸을 띄어쓰기로 남기려면 '    '
-
-      // 3. 파일명 조립 (예: ohlcv_krx__260305-    .archive)
+      const suffix = customText ? customText : '    '
       const fileName = `${collectionName}__${yymmdd}-${suffix}.archive`
       const targetPath = join(savePath, fileName)
 
@@ -196,6 +191,35 @@ app.whenReady().then(() => {
         }
       })
     })
+  })
+
+  // 🔥 삭제 실행 (새로 추가됨)
+  ipcMain.handle('delete-collections', async (_, dbName: string, collectionNames: string[]) => {
+    if (!dbName || !collectionNames || collectionNames.length === 0) {
+      return { success: false, message: '삭제할 데이터베이스나 컬렉션이 선택되지 않았습니다.' }
+    }
+
+    const client = new MongoClient(MONGO_URI)
+    try {
+      await client.connect()
+      const db = client.db(dbName)
+
+      let deletedCount = 0
+      for (const colName of collectionNames) {
+        await db.collection(colName).drop()
+        deletedCount++
+      }
+
+      return {
+        success: true,
+        message: `✅ 총 ${deletedCount}개의 컬렉션이 성공적으로 삭제되었습니다.\n삭제된 컬렉션:\n- ${collectionNames.join('\n- ')}`
+      }
+    } catch (error) {
+      console.error('컬렉션 삭제 실패:', error)
+      return { success: false, message: `❌ 컬렉션 삭제 중 오류 발생:\n${error}` }
+    } finally {
+      await client.close()
+    }
   })
 
   createWindow()

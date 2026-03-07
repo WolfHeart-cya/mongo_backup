@@ -5,11 +5,13 @@ const api = {
   getCollections: (dbName: string) => ipcRenderer.invoke('get-collections', dbName),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   selectRestoreTarget: () => ipcRenderer.invoke('select-restore-target'),
-  // customText 파라미터가 추가되었습니다.
   runBackup: (dbName: string, collectionName: string, savePath: string, customText: string) =>
     ipcRenderer.invoke('run-backup', dbName, collectionName, savePath, customText),
   runRestore: (targetDbName: string, sourcePath: string) =>
-    ipcRenderer.invoke('run-restore', targetDbName, sourcePath)
+    ipcRenderer.invoke('run-restore', targetDbName, sourcePath),
+  // 🔥 삭제 기능 통로 추가
+  deleteCollections: (dbName: string, collectionNames: string[]) =>
+    ipcRenderer.invoke('delete-collections', dbName, collectionNames)
 }
 
 if (process.contextIsolated) {
