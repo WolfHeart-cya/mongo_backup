@@ -100,14 +100,19 @@ app.whenReady().then(() => {
     async (_, dbName: string, collectionName: string, savePath: string, customText: string) => {
       if (!savePath) return { success: false, message: '저장 경로가 지정되지 않았습니다.' }
 
+      // 1. 날짜 생성 (YYMMDD)
       const d = new Date()
       const yy = String(d.getFullYear()).slice(-2)
       const mm = String(d.getMonth() + 1).padStart(2, '0')
       const dd = String(d.getDate()).padStart(2, '0')
       const yymmdd = `${yy}${mm}${dd}`
 
-      const suffix = customText ? customText : '    '
-      const fileName = `${collectionName}__${yymmdd}-${suffix}.archive`
+      // 🔥 2. 파일명 조합 로직 수정 (빈칸 유무에 따라 깔끔하게 분기)
+      const cleanCustomText = customText ? customText.trim() : ''
+      const fileName = cleanCustomText
+        ? `${collectionName}_${yymmdd}_${cleanCustomText}.archive` // 텍스트 입력 시: etn_ohlcv_260308_before_update.archive
+        : `${collectionName}_${yymmdd}.archive` // 빈칸일 시: etn_ohlcv_260308.archive
+
       const targetPath = join(savePath, fileName)
 
       const args = [
@@ -193,7 +198,7 @@ app.whenReady().then(() => {
     })
   })
 
-  // 🔥 삭제 실행 (새로 추가됨)
+  // 삭제 실행
   ipcMain.handle('delete-collections', async (_, dbName: string, collectionNames: string[]) => {
     if (!dbName || !collectionNames || collectionNames.length === 0) {
       return { success: false, message: '삭제할 데이터베이스나 컬렉션이 선택되지 않았습니다.' }
@@ -203,7 +208,7 @@ app.whenReady().then(() => {
     try {
       await client.connect()
       const db = client.db(dbName)
-
+      
       let deletedCount = 0
       for (const colName of collectionNames) {
         await db.collection(colName).drop()
