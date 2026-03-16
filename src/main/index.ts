@@ -208,7 +208,7 @@ app.whenReady().then(() => {
     try {
       await client.connect()
       const db = client.db(dbName)
-      
+
       let deletedCount = 0
       for (const colName of collectionNames) {
         await db.collection(colName).drop()
