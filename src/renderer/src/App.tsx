@@ -31,6 +31,9 @@ export default function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabType>('backup')
   const [databases, setDatabases] = useState<string[]>([])
 
+  // 새로고침 애니메이션 상태
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
   // --- Backup 탭 상태 ---
   const [backupCollections, setBackupCollections] = useState<string[]>([])
   const [backupSelectedDb, setBackupSelectedDb] = useState('')
@@ -84,12 +87,43 @@ export default function App(): JSX.Element {
 
   // 3. 삭제 탭: 선택된 DB가 바뀔 때 컬렉션 업데이트
   useEffect(() => {
-    // 동기적인 setState 호출(초기화)을 없애고 순수하게 데이터만 받아옵니다.
     if (!deleteSelectedDb || !window.api || !window.api.getCollections) return
     window.api.getCollections(deleteSelectedDb).then((cols: string[]) => {
       setDeleteCollections(cols)
     })
   }, [deleteSelectedDb])
+
+  // 🔥 새로고침 핸들러
+  const handleRefresh = async (): Promise<void> => {
+    if (!window.api) return
+    setIsRefreshing(true)
+
+    try {
+      // 1. DB 목록 갱신
+      const dbs = await window.api.getDatabases()
+      setDatabases(dbs)
+
+      // 2. 현재 활성화된 탭과 선택된 DB에 맞춰 컬렉션 즉시 갱신
+      if (activeTab === 'backup' && backupSelectedDb) {
+        const cols = await window.api.getCollections(backupSelectedDb)
+        setBackupCollections(cols)
+        // 기존에 선택된 컬렉션이 삭제되어 없어졌다면 첫 번째 항목으로 변경
+        if (!cols.includes(backupSelectedCol)) {
+          setBackupSelectedCol(cols.length > 0 ? cols[0] : '')
+        }
+      } else if (activeTab === 'delete' && deleteSelectedDb) {
+        const cols = await window.api.getCollections(deleteSelectedDb)
+        setDeleteCollections(cols)
+        // 방금 외부에서 삭제된 컬렉션이 체크박스에 있었다면 해제
+        setDeleteSelectedCols((prev) => prev.filter((c) => cols.includes(c)))
+      }
+    } catch (error) {
+      console.error('새로고침 실패:', error)
+    } finally {
+      // 시각적으로 도는 효과를 확실히 보여주기 위해 0.5초 유지
+      setTimeout(() => setIsRefreshing(false), 500)
+    }
+  }
 
   // --- 백업 핸들러 ---
   const handleBackupSelectFolder = async (): Promise<void> => {
@@ -146,7 +180,6 @@ export default function App(): JSX.Element {
   }
 
   // --- 삭제 핸들러 ---
-  // 🔥 TypeScript 에러 해결: 반환 타입(: void) 명시
   const handleCheckboxChange = (colName: string): void => {
     setDeleteSelectedCols((prev) =>
       prev.includes(colName) ? prev.filter((c) => c !== colName) : [...prev, colName]
@@ -219,11 +252,35 @@ export default function App(): JSX.Element {
         </div>
 
         <div className="p-6">
-          <h1 className="text-2xl font-bold mb-6 text-slate-100">
-            {activeTab === 'backup' && 'Kumah DB Backup'}
-            {activeTab === 'restore' && 'Kumah DB Restore'}
-            {activeTab === 'delete' && 'Kumah DB Cleanup'}
-          </h1>
+          {/* 🔥 타이틀과 새로고침 버튼 영역 */}
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold text-slate-100">
+              {activeTab === 'backup' && 'Kumah DB Backup'}
+              {activeTab === 'restore' && 'Kumah DB Restore'}
+              {activeTab === 'delete' && 'Kumah DB Cleanup'}
+            </h1>
+
+            <button
+              onClick={handleRefresh}
+              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold border border-slate-600"
+              title="DB 및 컬렉션 목록 새로고침"
+            >
+              <svg
+                className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              새로고침
+            </button>
+          </div>
 
           {/* ================= 백업 탭 ================= */}
           {activeTab === 'backup' && (
@@ -392,7 +449,6 @@ export default function App(): JSX.Element {
                 </label>
                 <select
                   value={deleteSelectedDb}
-                  // 🔥 여기서 상태를 직접 초기화하도록 변경
                   onChange={(e) => {
                     setDeleteSelectedDb(e.target.value)
                     setDeleteCollections([])
